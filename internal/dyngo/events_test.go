@@ -28,12 +28,6 @@ type (
 	testOp3Res  struct{}
 )
 
-//func init() {
-//dyngo.RegisterOperation((*testOp1Args)(nil), (*testOp1Res)(nil))
-//dyngo.RegisterOperation((*testOp2Args)(nil), (*testOp2Res)(nil))
-//dyngo.RegisterOperation((*testOp3Args)(nil), (*testOp3Res)(nil))
-//}
-
 func TestOperationEvents(t *testing.T) {
 	t.Run("start event", func(t *testing.T) {
 		op1 := dyngo.StartOperation(testOp1Args{})
@@ -186,68 +180,6 @@ func TestOperationEvents(t *testing.T) {
 		// The number of calls should be unchanged
 		require.Equal(t, 3, calls)
 	})
-
-	// We should *not* be catching arbitrary panics.
-	// 	t.Run("event listener panic", func(t *testing.T) {
-	// 		t.Run("start", func(t *testing.T) {
-	// 			op := dyngo.StartOperation(MyOperationArgs{})
-	// 			defer op.Finish(MyOperationRes{})
-	//
-	// 			// Panic on start
-	// 			calls := 0
-	// 			op.OnStart(MyOperationArgs{}, func(op *dyngo.Operation, v interface{}) {
-	// 				// Call counter to check we actually call this listener
-	// 				calls++
-	// 				panic(errors.New("oops"))
-	// 			})
-	// 			// Start the operation triggering the event: it should not panic
-	// 			require.NotPanics(t, func() {
-	// 				op := dyngo.StartOperation(MyOperationArgs{}, dyngo.WithParent(op))
-	// 				require.NotNil(t, op)
-	// 				defer op.Finish(MyOperationRes{})
-	// 				require.Equal(t, calls, 1)
-	// 			})
-	// 		})
-	//
-	// 		t.Run("finish", func(t *testing.T) {
-	// 			op := dyngo.StartOperation(MyOperationArgs{})
-	// 			defer op.Finish(MyOperationRes{})
-	// 			// Panic on finish
-	// 			calls := 0
-	// 			op.OnFinish((*MyOperationRes)(nil), func(op *dyngo.Operation, v interface{}) {
-	// 				// Call counter to check we actually call this listener
-	// 				calls++
-	// 				panic(errors.New("oops"))
-	// 			})
-	// 			// Run the operation triggering the finish event: it should not panic
-	// 			require.NotPanics(t, func() {
-	// 				op := dyngo.StartOperation(MyOperationArgs{}, dyngo.WithParent(op))
-	// 				require.NotNil(t, op)
-	// 				op.Finish(MyOperationRes{})
-	// 				require.Equal(t, calls, 1)
-	// 			})
-	// 		})
-	//
-	// 		t.Run("data", func(t *testing.T) {
-	// 			op := dyngo.StartOperation(MyOperationArgs{})
-	// 			defer op.Finish(MyOperationRes{})
-	// 			// Panic on data
-	// 			calls := 0
-	// 			op.OnData((*MyOperationData)(nil), func(op *dyngo.Operation, v interface{}) {
-	// 				// Call counter to check we actually call this listener
-	// 				calls++
-	// 				panic(errors.New("oops"))
-	// 			})
-	// 			// Run the operation triggering the finish event: it should not panic
-	// 			require.NotPanics(t, func() {
-	// 				op := dyngo.StartOperation(MyOperationArgs{}, dyngo.WithParent(op))
-	// 				require.NotNil(t, op)
-	// 				defer op.Finish(MyOperationRes{})
-	// 				op.EmitData(MyOperationData{})
-	// 				require.Equal(t, calls, 1)
-	// 			})
-	//  		})
-	// 	})
 }
 
 func BenchmarkEvents(b *testing.B) {
