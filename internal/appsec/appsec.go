@@ -17,7 +17,6 @@ import (
 
 	"gopkg.in/DataDog/dd-trace-go.v1/internal/appsec/intake"
 	"gopkg.in/DataDog/dd-trace-go.v1/internal/appsec/intake/api"
-	"gopkg.in/DataDog/dd-trace-go.v1/internal/dyngo"
 	"gopkg.in/DataDog/dd-trace-go.v1/internal/log"
 )
 
@@ -118,11 +117,10 @@ func isEnabled() (bool, error) {
 }
 
 type appsec struct {
-	client          *intake.Client
-	eventChan       chan *api.SecurityEvent
-	wg              sync.WaitGroup
-	cfg             *Config
-	unregisterInstr []dyngo.UnregisterFunc
+	client    *intake.Client
+	eventChan chan *api.SecurityEvent
+	wg        sync.WaitGroup
+	cfg       *Config
 }
 
 func newAppSec(cfg *Config) (*appsec, error) {
@@ -153,9 +151,6 @@ func (a *appsec) start() {
 
 // Stop stops the AppSec agent goroutine.
 func (a *appsec) stop() {
-	for _, unregister := range a.unregisterInstr {
-		unregister()
-	}
 	// Stop the batching goroutine
 	close(a.eventChan)
 	// Gracefully stop by waiting for the event loop goroutine to stop

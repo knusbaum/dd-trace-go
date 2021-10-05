@@ -6,8 +6,6 @@
 package dyngo
 
 import (
-	"errors"
-	"fmt"
 	"reflect"
 	"sync"
 )
@@ -17,7 +15,6 @@ type (
 	Option interface {
 		apply(s *Operation)
 	}
-
 	optionFunc func(s *Operation)
 )
 
@@ -32,18 +29,6 @@ func WithParent(parent *Operation) Option {
 	})
 }
 
-// WithEventListener allows to immediately register an event listener to the operation being created, before its
-// start event gets emitted. This allows to react to an event that might happen due to the start event of the
-// operation being created.
-func WithEventListener(l EventListener) Option {
-	return optionFunc(func(op *Operation) {
-		// Don't use Register() to avoid the function closure allocation it implies for its return value.
-		l.registerTo(op)
-	})
-}
-
-var root = newOperation()
-
 // Operation structure allowing to subscribe to operation events and to navigate in the operation stack. Events
 // bubble-up the operation stack, which allows listening to future events that might happen in the operation lifetime.
 type Operation struct {
@@ -55,48 +40,15 @@ type Operation struct {
 	mu       sync.RWMutex
 }
 
-// List of registered operations allowing an exhaustive type-checking of operation argument and result types,
-// and event listeners.
-var (
-	// Map of registered operation argument and result types. It stores the operation argument types with their
-	// expected result types.
-	operationRegister = make(map[reflect.Type]reflect.Type)
-	// Map of registered operation result types to find if a given result type was registered. Used to validate
-	// finish event listeners.
-	operationResRegister = make(map[reflect.Type]struct{})
-)
-
-// RegisterOperation registers an operation through its argument and result types that should be used when
-// starting and finishing it.
-func RegisterOperation(args, res interface{}) {
-	argsType, err := validateEventListenerKey(args)
-	if err != nil {
-		panic(err)
-	}
-	resType, err := validateEventListenerKey(res)
-	if err != nil {
-		panic(err)
-	}
-	if resType, exists := operationRegister[argsType]; exists {
-		panic(fmt.Errorf("operation already registered with argument type %s and result type %s", argsType, resType))
-	}
-	operationRegister[argsType] = resType
-	operationResRegister[resType] = struct{}{}
-}
-
 // StartOperation starts a new operation along with its arguments and emits a start event with the operation arguments.
 func StartOperation(args interface{}, opts ...Option) *Operation {
-	expectedResType, err := getOperationRes(reflect.TypeOf(args))
-	if err != nil {
-		panic(err)
-	}
 	o := newOperation(opts...)
-	o.expectedResType = expectedResType
-	if o.parent == nil {
-		o.parent = root
+	o.expectedResType = reflect.TypeOf(args)
+	if o.expectedResType == nil {
+		return o
 	}
 	for op := o.Parent(); op != nil; op = op.Parent() {
-		op.emitStartEvent(o, args)
+		op.emitEvent(&op.onStart, o, args)
 	}
 	return o
 }
@@ -107,10 +59,6 @@ func newOperation(opts ...Option) *Operation {
 		opt.apply(op)
 	}
 	return op
-}
-
-func (o *Operation) emitStartEvent(eventOp *Operation, args interface{}) {
-	o.emitEvent(&o.onStart, eventOp, args)
 }
 
 // Parent return the parent operation. It returns nil for the root operation.
@@ -127,16 +75,9 @@ func (o *Operation) Finish(results interface{}) {
 		return
 	}
 	defer o.disable()
-	if err := validateExpectedRes(reflect.TypeOf(results), o.expectedResType); err != nil {
-		panic(err)
-	}
 	for op := o; op != nil; op = op.Parent() {
-		op.emitFinishEvent(o, results)
+		op.emitEvent(&op.onFinish, o, results)
 	}
-}
-
-func (o *Operation) emitFinishEvent(eventOp *Operation, results interface{}) {
-	o.emitEvent(&o.onFinish, eventOp, results)
 }
 
 func (o *Operation) disable() {
@@ -151,12 +92,9 @@ func (o *Operation) disable() {
 // execution, possibly throughout several executions.
 func (o *Operation) EmitData(data interface{}) {
 	for op := o; op != nil; op = op.Parent() {
-		op.emitDataEvent(o, data)
+		//op.emitDataEvent(o, data)
+		op.emitEvent(&op.onData, o, data)
 	}
-}
-
-func (o *Operation) emitDataEvent(eventOp *Operation, data interface{}) {
-	o.emitEvent(&o.onData, eventOp, data)
 }
 
 // emitEvent calls the event listeners of the given event register when it is not disabled.
@@ -169,28 +107,6 @@ func (o *Operation) emitEvent(r *eventRegister, op *Operation, v interface{}) {
 	r.callListeners(op, v)
 }
 
-// UnregisterFunc is a function allowing to unregister from an operation the previously registered event listeners.
-type UnregisterFunc func()
-
-// Register allows to register the given event listeners to the operation. An unregistration function is returned
-// allowing to unregister the event listeners from the operation.
-func (o *Operation) Register(l ...EventListener) UnregisterFunc {
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-	if o.disabled {
-		return func() {}
-	}
-	ids := make([]unregisterFrom, len(l))
-	for i, l := range l {
-		ids[i] = l.registerTo(o)
-	}
-	return func() {
-		for _, id := range ids {
-			id.unregisterFrom(o)
-		}
-	}
-}
-
 // OnStart registers the start event listener whose argument type is described by the argsPtr argument which must be a
 // nil pointer to the expected argument type. For example:
 //
@@ -199,20 +115,13 @@ func (o *Operation) Register(l ...EventListener) UnregisterFunc {
 //         args := v.(MyOpArguments)
 //     })
 //
-func (o *Operation) OnStart(argsPtr interface{}, l OnStartEventListenerFunc) {
+func (o *Operation) OnStart(argsPtr interface{}, l EventListenerFunc) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	if o.disabled {
 		return
 	}
-	argsType, err := validateEventListenerKey(argsPtr)
-	if err != nil {
-		panic(err)
-	}
-	if err := validateStartOperationArgs(argsType); err != nil {
-		panic(err)
-	}
-	o.onStart.add(argsType, l)
+	o.onStart.add(reflect.TypeOf(argsPtr), l)
 }
 
 // OnData registers the data event listener whose data type is described by the dataPtr argument which must be a
@@ -223,17 +132,13 @@ func (o *Operation) OnStart(argsPtr interface{}, l OnStartEventListenerFunc) {
 //         args := v.(MyOpData)
 //     })
 //
-func (o *Operation) OnData(dataPtr interface{}, l OnDataEventListenerFunc) {
+func (o *Operation) OnData(dataPtr interface{}, l EventListenerFunc) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	if o.disabled {
 		return
 	}
-	dataType, err := validateEventListenerKey(dataPtr)
-	if err != nil {
-		panic(err)
-	}
-	o.onData.add(dataType, l)
+	o.onData.add(reflect.TypeOf(dataPtr), l)
 }
 
 // OnFinish registers the finish event listener whose result type is described by the resPtr argument which must be a
@@ -244,58 +149,11 @@ func (o *Operation) OnData(dataPtr interface{}, l OnDataEventListenerFunc) {
 //         args := v.(MyOpResults)
 //     })
 //
-func (o *Operation) OnFinish(resPtr interface{}, l OnFinishEventListenerFunc) {
+func (o *Operation) OnFinish(resPtr interface{}, l EventListenerFunc) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	if o.disabled {
 		return
 	}
-	resType, err := validateEventListenerKey(resPtr)
-	if err != nil {
-		panic(err)
-	}
-	if err := validateFinishOperationRes(resType); err != nil {
-		panic(err)
-	}
-	o.onFinish.add(resType, l)
-}
-
-func validateExpectedRes(res, expectedRes reflect.Type) error {
-	if res != expectedRes {
-		return fmt.Errorf("unexpected operation result: expecting type %s instead of %s", expectedRes, res)
-	}
-	return nil
-}
-
-func getOperationRes(args reflect.Type) (res reflect.Type, err error) {
-	res, ok := operationRegister[args]
-	if !ok {
-		return nil, fmt.Errorf("unexpected operation: unknow operation argument type %s", args)
-	}
-	return res, nil
-}
-
-func validateStartOperationArgs(argsType reflect.Type) error {
-	if _, ok := operationRegister[argsType]; !ok {
-		return fmt.Errorf("unexpected use of an unregistered operation of argument type %s", argsType)
-	}
-	return nil
-}
-
-func validateFinishOperationRes(resType reflect.Type) error {
-	if _, ok := operationResRegister[resType]; !ok {
-		return fmt.Errorf("unexpected use Tof an unregistered operation of result type %s", resType)
-	}
-	return nil
-}
-
-func validateEventListenerKey(key interface{}) (keyType reflect.Type, err error) {
-	if key == nil {
-		return nil, errors.New("unexpected nil event listener key")
-	}
-	keyPtrType := reflect.TypeOf(key)
-	if kind := keyPtrType.Kind(); kind != reflect.Ptr {
-		return nil, fmt.Errorf("unexpected event listener key of type %s instead of a structure pointer", keyPtrType)
-	}
-	return keyPtrType.Elem(), nil
+	o.onFinish.add(reflect.TypeOf(resPtr), l)
 }

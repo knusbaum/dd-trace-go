@@ -10,8 +10,6 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
-
-	"gopkg.in/DataDog/dd-trace-go.v1/internal/log"
 )
 
 type (
@@ -33,25 +31,26 @@ type (
 	// eventListenerID is the unique ID of an event when registering it. It allows to find it back and remove it from
 	// the list of event listeners when unregistering it.
 	eventListenerID uint32
-	// onStartEventListenerKey is a helper type implementing unregisterFrom to unregister the ID from the correct
-	// event register, i.e. the start event register.
-	onStartEventListenerKey eventListenerKey
-	// onFinishEventListenerKey is a helper type implementing unregisterFrom to unregister the ID from the correct
-	//	// event register, i.e. the finish event register.
-	onFinishEventListenerKey eventListenerKey
-	// onDataEventListenerKey is a helper type implementing unregisterFrom to unregister the ID from the correct
-	//	// event register, i.e. the data event register.
-	onDataEventListenerKey eventListenerKey
-	// eventListenerKey allows to lookup for the event listener in the event register.
+	// 	// onStartEventListenerKey is a helper type implementing unregisterFrom to unregister the ID from the correct
+	// 	// event register, i.e. the start event register.
+	// 	onStartEventListenerKey eventListenerKey
+	// 	// onFinishEventListenerKey is a helper type implementing unregisterFrom to unregister the ID from the correct
+	// 	//	// event register, i.e. the finish event register.
+	// 	onFinishEventListenerKey eventListenerKey
+	// 	// onDataEventListenerKey is a helper type implementing unregisterFrom to unregister the ID from the correct
+	// 	//	// event register, i.e. the data event register.
+	// 	onDataEventListenerKey eventListenerKey
+	// 	// eventListenerKey allows to lookup for the event listener in the event register.
 	eventListenerKey struct {
 		key reflect.Type
 		id  eventListenerID
 	}
-	// unregisterFrom interface to dynamically dispatch the unregistration of the ID to the correct event register
-	// store of the operation.
-	unregisterFrom interface {
-		unregisterFrom(*Operation)
-	}
+
+// 	// unregisterFrom interface to dynamically dispatch the unregistration of the ID to the correct event register
+// 	// store of the operation.
+// 	unregisterFrom interface {
+// 		unregisterFrom(*Operation)
+// 	}
 )
 
 // lastID is the last event listener ID that was given to the latest event listener.
@@ -98,11 +97,6 @@ func (r *eventRegister) clear() {
 }
 
 func (r *eventRegister) callListeners(op *Operation, data interface{}) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Error("appsec: recovered from an unexpected panic: %+v", r)
-		}
-	}()
 	dataT := reflect.TypeOf(data)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -112,12 +106,12 @@ func (r *eventRegister) callListeners(op *Operation, data interface{}) {
 }
 
 type (
-	// OnStartEventListenerFunc is a start event listener function.
-	OnStartEventListenerFunc EventListenerFunc
-	// OnDataEventListenerFunc is a data event listener function.
-	OnDataEventListenerFunc EventListenerFunc
-	// OnFinishEventListenerFunc is a finish event listener function.
-	OnFinishEventListenerFunc EventListenerFunc
+	// 	// OnStartEventListenerFunc is a start event listener function.
+	// 	OnStartEventListenerFunc EventListenerFunc
+	// 	// OnDataEventListenerFunc is a data event listener function.
+	// 	OnDataEventListenerFunc EventListenerFunc
+	// 	// OnFinishEventListenerFunc is a finish event listener function.
+	// 	OnFinishEventListenerFunc EventListenerFunc
 
 	// EventListenerFunc is an alias to the event listener function.
 	// The listener must perform the type-assertion to the expected type.
@@ -132,101 +126,101 @@ type (
 	//
 	EventListenerFunc = func(op *Operation, v interface{})
 
-	// EventListener interface implemented by event listeners. They can be passed used in the instrumentation
-	// descriptors and the operation Register method.
-	EventListener interface {
-		// registerTo dynamically dispatches the event listener registration to the proper event register.
-		registerTo(*Operation) unregisterFrom
-	}
-
-	// eventListener is a structure describing an event listener.
-	eventListener struct {
-		// key is the listened event type, used as key type in the event register.
-		key reflect.Type
-		l   EventListenerFunc
-	}
-	// onStartEventListener is a helper type implementing the EventListener interface.
-	onStartEventListener eventListener
-	// onDataEventListener is a helper type implementing the EventListener interface.
-	onDataEventListener eventListener
-	// onFinishEventListener is a helper type implementing the EventListener interface.
-	onFinishEventListener eventListener
+// 	// EventListener interface implemented by event listeners. They can be passed used in the instrumentation
+// 	// descriptors and the operation Register method.
+// 	EventListener interface {
+// 		// registerTo dynamically dispatches the event listener registration to the proper event register.
+// 		registerTo(*Operation) unregisterFrom
+// 	}
+//
+// 	// eventListener is a structure describing an event listener.
+// 	eventListener struct {
+// 		// key is the listened event type, used as key type in the event register.
+// 		key reflect.Type
+// 		l   EventListenerFunc
+// 	}
+// 	// onStartEventListener is a helper type implementing the EventListener interface.
+// 	onStartEventListener eventListener
+// 	// onDataEventListener is a helper type implementing the EventListener interface.
+// 	onDataEventListener eventListener
+// 	// onFinishEventListener is a helper type implementing the EventListener interface.
+// 	onFinishEventListener eventListener
 )
 
-// OnStartEventListener returns a start event listener whose argument type is described by the argsPtr argument which
-// must be a nil pointer to the expected argument type. For example:
+// // OnStartEventListener returns a start event listener whose argument type is described by the argsPtr argument which
+// // must be a nil pointer to the expected argument type. For example:
+// //
+// //     // Create a finish event listener whose result type is MyOpArgs
+// //     OnStartEventListener((*MyOpArgs), func(op *Operation, v interface{}) {
+// //         results := v.(MyOpArgs)
+// //     })
+// //
+// func OnStartEventListener(argsPtr interface{}, l OnStartEventListenerFunc) EventListener {
+// 	argsType, err := validateEventListenerKey(argsPtr)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	return onStartEventListener{key: argsType, l: l}
+// }
 //
-//     // Create a finish event listener whose result type is MyOpArgs
-//     OnStartEventListener((*MyOpArgs), func(op *Operation, v interface{}) {
-//         results := v.(MyOpArgs)
-//     })
+// func (l onStartEventListener) registerTo(op *Operation) unregisterFrom {
+// 	key := l.key
+// 	id := op.onStart.add(key, l.l)
+// 	return onStartEventListenerKey{key: key, id: id}
+// }
 //
-func OnStartEventListener(argsPtr interface{}, l OnStartEventListenerFunc) EventListener {
-	argsType, err := validateEventListenerKey(argsPtr)
-	if err != nil {
-		panic(err)
-	}
-	return onStartEventListener{key: argsType, l: l}
-}
+// func (k onStartEventListenerKey) unregisterFrom(op *Operation) {
+// 	op.onStart.remove(k.key, k.id)
+// }
 
-func (l onStartEventListener) registerTo(op *Operation) unregisterFrom {
-	key := l.key
-	id := op.onStart.add(key, l.l)
-	return onStartEventListenerKey{key: key, id: id}
-}
-
-func (k onStartEventListenerKey) unregisterFrom(op *Operation) {
-	op.onStart.remove(k.key, k.id)
-}
-
-// OnDataEventListener returns a data event listener whose type is described by the dataPtr argument which must be a nil
-// pointer to the expected data type. For example:
+// // OnDataEventListener returns a data event listener whose type is described by the dataPtr argument which must be a nil
+// // pointer to the expected data type. For example:
+// //
+// //     // Create a data event listener whose result type is MyOpData
+// //     OnDataEventListener((*MyOpData), func(op *Operation, v interface{}) {
+// //         results := v.(MyOpData)
+// //     })
+// //
+// func OnDataEventListener(dataPtr interface{}, l OnDataEventListenerFunc) EventListener {
+// 	dataType, err := validateEventListenerKey(dataPtr)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	return onDataEventListener{key: dataType, l: l}
+// }
 //
-//     // Create a data event listener whose result type is MyOpData
-//     OnDataEventListener((*MyOpData), func(op *Operation, v interface{}) {
-//         results := v.(MyOpData)
-//     })
+// func (l onDataEventListener) registerTo(op *Operation) unregisterFrom {
+// 	key := l.key
+// 	id := op.onData.add(l.key, l.l)
+// 	return onDataEventListenerKey{key: key, id: id}
+// }
 //
-func OnDataEventListener(dataPtr interface{}, l OnDataEventListenerFunc) EventListener {
-	dataType, err := validateEventListenerKey(dataPtr)
-	if err != nil {
-		panic(err)
-	}
-	return onDataEventListener{key: dataType, l: l}
-}
+// func (k onDataEventListenerKey) unregisterFrom(op *Operation) {
+// 	op.onData.remove(k.key, k.id)
+// }
 
-func (l onDataEventListener) registerTo(op *Operation) unregisterFrom {
-	key := l.key
-	id := op.onData.add(l.key, l.l)
-	return onDataEventListenerKey{key: key, id: id}
-}
-
-func (k onDataEventListenerKey) unregisterFrom(op *Operation) {
-	op.onData.remove(k.key, k.id)
-}
-
-// OnFinishEventListener returns a finish event listener whose result type is described by the resPtr argument which
-// must be a nil pointer to the expected result type. For example:
+// // OnFinishEventListener returns a finish event listener whose result type is described by the resPtr argument which
+// // must be a nil pointer to the expected result type. For example:
+// //
+// //     // Create a finish event listener whose result type is MyOpResults
+// //     OnFinishEventListener((*MyOpResults), func(op *Operation, v interface{}) {
+// //         results := v.(MyOpResults)
+// //     })
+// //
+// func OnFinishEventListener(resPtr interface{}, l OnFinishEventListenerFunc) EventListener {
+// 	resType, err := validateEventListenerKey(resPtr)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	return onFinishEventListener{key: resType, l: l}
+// }
 //
-//     // Create a finish event listener whose result type is MyOpResults
-//     OnFinishEventListener((*MyOpResults), func(op *Operation, v interface{}) {
-//         results := v.(MyOpResults)
-//     })
+// func (l onFinishEventListener) registerTo(op *Operation) unregisterFrom {
+// 	key := l.key
+// 	id := op.onFinish.add(key, l.l)
+// 	return onFinishEventListenerKey{key: key, id: id}
+// }
 //
-func OnFinishEventListener(resPtr interface{}, l OnFinishEventListenerFunc) EventListener {
-	resType, err := validateEventListenerKey(resPtr)
-	if err != nil {
-		panic(err)
-	}
-	return onFinishEventListener{key: resType, l: l}
-}
-
-func (l onFinishEventListener) registerTo(op *Operation) unregisterFrom {
-	key := l.key
-	id := op.onFinish.add(key, l.l)
-	return onFinishEventListenerKey{key: key, id: id}
-}
-
-func (k onFinishEventListenerKey) unregisterFrom(op *Operation) {
-	op.onFinish.remove(k.key, k.id)
-}
+// func (k onFinishEventListenerKey) unregisterFrom(op *Operation) {
+// 	op.onFinish.remove(k.key, k.id)
+// }
