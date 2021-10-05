@@ -102,4 +102,4 @@ func (r *eventRegister) callListeners(op *Operation, data interface{}) {
 //         l(op, v.(T))
 //      }
 //   }
-type EventListenerFunc func(op *Operation, v interface{})   results := v.(MyOpResults)
+type EventListenerFunc func(op *Operation, v interface{})

@@ -20,16 +20,16 @@ type (
 	// SecurityEvent is a generic security event payload holding an actual security event (eg. a WAF security event),
 	// along with its optional context.
 	SecurityEvent struct {
-		Event   SecEventEvent
+		Event   Event
 		Context []AttackContextOption
 	}
 
-	SecEventEvent interface {
+	Event interface {
 		AttackEvents() []*AttackEvent
 	}
 )
 
-func NewSecurityEvent(event SecEventEvent, opts ...AttackContextOption) *SecurityEvent {
+func NewSecurityEvent(event Event, opts ...AttackContextOption) *SecurityEvent {
 	return &SecurityEvent{Event: event, Context: opts}
 }
 
