@@ -12,8 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"gopkg.in/DataDog/dd-trace-go.v1/internal/appsec/internal/intake/api"
-	appsectypes "gopkg.in/DataDog/dd-trace-go.v1/internal/appsec/types"
+	"gopkg.in/DataDog/dd-trace-go.v1/internal/appsec/intake/api"
 
 	"github.com/stretchr/testify/mock"
 )
@@ -45,7 +44,7 @@ func TestEventBatchingLoop(t *testing.T) {
 							// Have enough room for the amount of expected batches
 							SendBatchCalled: make(chan struct{}, expectedNbBatches),
 						}
-						eventChan := make(chan *appsectypes.SecurityEvent, eventChanLen)
+						eventChan := make(chan *api.SecurityEvent, eventChanLen)
 						cfg := &Config{
 							MaxBatchLen:       maxBatchLen,
 							MaxBatchStaleTime: time.Hour, // Long enough so that it never triggers and we only test the batching logic
@@ -62,7 +61,7 @@ func TestEventBatchingLoop(t *testing.T) {
 						client.On("SendBatch", mock.Anything, mock.AnythingOfType("api.EventBatch")).Times(expectedNbBatches).Return(nil)
 						// Send enough events to generate expectedNbBatches
 						for i := 0; i < maxBatchLen*expectedNbBatches; i++ {
-							eventChan <- &appsectypes.SecurityEvent{}
+							eventChan <- &api.SecurityEvent{}
 						}
 						// Sync with the client and check the client calls are being done as expected
 						for i := 0; i < expectedNbBatches; i++ {
@@ -83,7 +82,7 @@ func TestEventBatchingLoop(t *testing.T) {
 		client := &IntakeClientMock{
 			SendBatchCalled: make(chan struct{}, 2),
 		}
-		eventChan := make(chan *appsectypes.SecurityEvent, 1024)
+		eventChan := make(chan *api.SecurityEvent, 1024)
 		maxStaleTime := time.Millisecond
 		cfg := &Config{
 			MaxBatchLen:       1024,
@@ -102,16 +101,16 @@ func TestEventBatchingLoop(t *testing.T) {
 		client.On("SendBatch", mock.Anything, mock.AnythingOfType("api.EventBatch")).Times(2).Return(nil)
 
 		// Send a few events and wait for the configured max stale time so that the batch gets sent
-		eventChan <- &appsectypes.SecurityEvent{}
-		eventChan <- &appsectypes.SecurityEvent{}
-		eventChan <- &appsectypes.SecurityEvent{}
-		eventChan <- &appsectypes.SecurityEvent{}
+		eventChan <- &api.SecurityEvent{}
+		eventChan <- &api.SecurityEvent{}
+		eventChan <- &api.SecurityEvent{}
+		eventChan <- &api.SecurityEvent{}
 		time.Sleep(maxStaleTime)
 		// Sync with the client
 		<-client.SendBatchCalled
 
 		// Send a few events and wait for the configured max stale time so that the batch gets sent
-		eventChan <- &appsectypes.SecurityEvent{}
+		eventChan <- &api.SecurityEvent{}
 		// Sync with the client
 		<-client.SendBatchCalled
 		time.Sleep(maxStaleTime)
@@ -131,7 +130,7 @@ func TestEventBatchingLoop(t *testing.T) {
 		t.Run("by closing the event channel", func(t *testing.T) {
 			t.Run("with an empty batch", func(t *testing.T) {
 				client := &IntakeClientMock{}
-				eventChan := make(chan *appsectypes.SecurityEvent, 1024)
+				eventChan := make(chan *api.SecurityEvent, 1024)
 				cfg := &Config{
 					MaxBatchLen:       1024,
 					MaxBatchStaleTime: time.Hour,
@@ -158,7 +157,7 @@ func TestEventBatchingLoop(t *testing.T) {
 				client := &IntakeClientMock{
 					SendBatchCalled: make(chan struct{}, 1),
 				}
-				eventChan := make(chan *appsectypes.SecurityEvent, 1024)
+				eventChan := make(chan *api.SecurityEvent, 1024)
 				cfg := &Config{
 					MaxBatchLen:       1024,
 					MaxBatchStaleTime: time.Hour,
@@ -174,7 +173,7 @@ func TestEventBatchingLoop(t *testing.T) {
 
 				// Perform an event
 				client.On("SendBatch", mock.Anything, mock.AnythingOfType("api.EventBatch")).Times(1).Return(nil)
-				eventChan <- &appsectypes.SecurityEvent{}
+				eventChan <- &api.SecurityEvent{}
 
 				// Close the context to stop the loop
 				close(eventChan)

@@ -15,10 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"gopkg.in/DataDog/dd-trace-go.v1/internal/appsec/internal/intake"
-	"gopkg.in/DataDog/dd-trace-go.v1/internal/appsec/internal/intake/api"
-	httpprotection "gopkg.in/DataDog/dd-trace-go.v1/internal/appsec/internal/protection/http"
-	appsectypes "gopkg.in/DataDog/dd-trace-go.v1/internal/appsec/types"
+	"gopkg.in/DataDog/dd-trace-go.v1/internal/appsec/intake"
+	"gopkg.in/DataDog/dd-trace-go.v1/internal/appsec/intake/api"
 	"gopkg.in/DataDog/dd-trace-go.v1/internal/dyngo"
 	"gopkg.in/DataDog/dd-trace-go.v1/internal/log"
 )
@@ -95,7 +93,7 @@ func Stop() {
 
 var (
 	activeAppSec *appsec
-	mu           sync.Mutex
+	mu           sync.RWMutex
 )
 
 func setActiveAppSec(a *appsec) {
@@ -121,7 +119,7 @@ func isEnabled() (bool, error) {
 
 type appsec struct {
 	client          *intake.Client
-	eventChan       chan *appsectypes.SecurityEvent
+	eventChan       chan *api.SecurityEvent
 	wg              sync.WaitGroup
 	cfg             *Config
 	unregisterInstr []dyngo.UnregisterFunc
@@ -142,7 +140,7 @@ func newAppSec(cfg *Config) (*appsec, error) {
 	}
 
 	return &appsec{
-		eventChan: make(chan *appsectypes.SecurityEvent, 1000),
+		eventChan: make(chan *api.SecurityEvent, 1000),
 		client:    intakeClient,
 		cfg:       cfg,
 	}, nil
@@ -165,31 +163,27 @@ func (a *appsec) stop() {
 }
 
 func (a *appsec) run() {
-	a.unregisterInstr = append(a.unregisterInstr, httpprotection.Register(), a.listenSecurityEvents())
-
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-
-		globalEventCtx := []appsectypes.SecurityEventContext{
-			appsectypes.ServiceContext{
+		defaults := api.GlobalAttackContext{
+			Service: api.AttackContextService{
 				Name:        a.cfg.Service.Name,
 				Version:     a.cfg.Service.Version,
 				Environment: a.cfg.Service.Environment,
 			},
-			appsectypes.TagContext(a.cfg.Tags),
-			appsectypes.TracerContext{
-				Runtime:        "go",
+			Tags: api.AttackContextTags{Values: a.cfg.Tags},
+			Tracer: api.AttackContextTracer{
+				RuntimeType:    "go",
 				RuntimeVersion: runtime.Version(),
-				Version:        a.cfg.Version,
+				LibVersion:     a.cfg.Version,
 			},
-			appsectypes.HostContext{
+			Host: api.AttackContextHost{
+				OsType:   fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
 				Hostname: a.cfg.Hostname,
-				OS:       fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
 			},
 		}
-
-		eventBatchingLoop(a.client, a.eventChan, globalEventCtx, a.cfg)
+		eventBatchingLoop(a.client, a.eventChan, api.WithGlobalAttackContext(defaults), a.cfg)
 	}()
 }
 
@@ -197,9 +191,9 @@ type intakeClient interface {
 	SendBatch(context.Context, api.EventBatch) error
 }
 
-func eventBatchingLoop(client intakeClient, eventChan <-chan *appsectypes.SecurityEvent, globalEventCtx []appsectypes.SecurityEventContext, cfg *Config) {
+func eventBatchingLoop(client intakeClient, eventChan <-chan *api.SecurityEvent, globalEventCtx api.AttackContextOption, cfg *Config) {
 	// The batch of events
-	batch := make([]*appsectypes.SecurityEvent, 0, cfg.MaxBatchLen)
+	batch := make([]*api.SecurityEvent, 0, cfg.MaxBatchLen)
 
 	// Timer initialized to a first dummy time value to initialize it and so that we can immediately
 	// use its channel field in the following select statement.
@@ -253,18 +247,14 @@ func eventBatchingLoop(client intakeClient, eventChan <-chan *appsectypes.Securi
 	}
 }
 
-func (a *appsec) listenSecurityEvents() dyngo.UnregisterFunc {
-	return dyngo.Register(dyngo.InstrumentationDescriptor{
-		Title: "Attack Queue",
-		Instrumentation: dyngo.OperationInstrumentation{
-			EventListener: appsectypes.OnSecurityEventDataListener(func(_ *dyngo.Operation, event *appsectypes.SecurityEvent) {
-				select {
-				case a.eventChan <- event:
-				default:
-					// TODO(julio): add metrics on the nb of dropped events
-				}
-			}),
-		},
-	})
-
+func SubmitSecurityEvent(event *api.SecurityEvent) {
+	mu.RLock()
+	defer mu.RUnlock()
+	if activeAppSec != nil {
+		select {
+		case activeAppSec.eventChan <- event:
+		default:
+			// TODO(julio): add metrics on the nb of dropped events
+		}
+	}
 }

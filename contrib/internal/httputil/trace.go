@@ -16,8 +16,7 @@ import (
 	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/ext"
 	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 	httpinstr "gopkg.in/DataDog/dd-trace-go.v1/internal/appsec/instrumentation/http"
-	appsectypes "gopkg.in/DataDog/dd-trace-go.v1/internal/appsec/types"
-	"gopkg.in/DataDog/dd-trace-go.v1/internal/dyngo"
+	"gopkg.in/DataDog/dd-trace-go.v1/internal/appsec/intake/api"
 )
 
 // TraceConfig defines the configuration for request tracing.
@@ -55,31 +54,19 @@ func TraceAndServe(h http.Handler, cfg *TraceConfig) {
 	span, ctx := tracer.StartSpanFromContext(cfg.Request.Context(), "http.request", opts...)
 	defer span.Finish(cfg.FinishOpts...)
 
-	cfg.ResponseWriter = wrapResponseWriter(cfg.ResponseWriter, span)
+	w, rw := wrapResponseWriter(cfg.ResponseWriter, span)
+	cfg.ResponseWriter = w
 
-	op := httpinstr.StartHandlerOperation(
-		httpinstr.HandlerOperationArgs{
-			IsTLS:      cfg.Request.TLS != nil,
-			Method:     cfg.Request.Method,
-			Host:       cfg.Request.Host,
-			RequestURI: cfg.Request.RequestURI,
-			RemoteAddr: cfg.Request.RemoteAddr,
-			Headers:    cfg.Request.Header,
-		},
-		dyngo.WithEventListener(appsectypes.OnSecurityEventDataListener(func(op *dyngo.Operation, e *appsectypes.SecurityEvent) {
-			// Keep this trace due to the security event
+	finish := httpinstr.DetectAttacks(cfg.Request)
+	defer func() {
+		if secEvent := finish(rw.status); secEvent != nil {
 			span.SetTag(ext.SamplingPriority, ext.ManualKeep)
 			// Add context to the event
 			spanCtx := span.Context()
 			// Add the APM context to the event
-			e.AddContext(appsectypes.SpanContext{
-				TraceID: spanCtx.TraceID(),
-				SpanID:  spanCtx.SpanID(),
-			})
-		})),
-	)
-	// TODO(julio): get the status code out of the wrapped response writer
-	defer op.Finish(httpinstr.HandlerOperationRes{})
+			secEvent.AddOption(api.WithTrace(spanCtx.TraceID(), spanCtx.SpanID()))
+		}
+	}()
 
 	h.ServeHTTP(cfg.ResponseWriter, cfg.Request.WithContext(ctx))
 }
@@ -90,6 +77,10 @@ type responseWriter struct {
 	http.ResponseWriter
 	span   ddtrace.Span
 	status int
+}
+
+func (w *responseWriter) Status() int {
+	return w.status
 }
 
 func newResponseWriter(w http.ResponseWriter, span ddtrace.Span) *responseWriter {
