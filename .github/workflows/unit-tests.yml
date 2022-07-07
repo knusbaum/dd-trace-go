@@ -18,7 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
         with:
-          repository: 'DataDog/dd-trace-go'
+          repository: 'knusbaum/dd-trace-go'
       - name: Milestone
         run: |
           go run checkmilestone.go
@@ -28,7 +28,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
         with:
-          repository: 'DataDog/dd-trace-go'
+          repository: 'knusbaum/dd-trace-go'
       - name: Copyright
         run: |
           go run checkcopyright.go
@@ -38,7 +38,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
         with:
-          repository: 'DataDog/dd-trace-go'
+          repository: 'knusbaum/dd-trace-go'
       - name: gofmt
         run: |
           if [ "$(gofmt -e -l . | wc -l)" -gt 0 ]; then
@@ -49,9 +49,9 @@ jobs:
       - name: goimports
         run: |
           go install golang.org/x/tools/cmd/goimports
-          if [ "$(~/go/bin/goimports -e -l -local gopkg.in/DataDog/dd-trace-go.v1 . | wc -l)" -gt 0 ]; then
-            echo "Run 'goimports -w -local gopkg.in/DataDog/dd-trace-go.v1 .' to format code."
-            ~/go/bin/goimports -d -local gopkg.in/DataDog/dd-trace-go.v1 .
+          if [ "$(~/go/bin/goimports -e -l -local gopkg.in/knusbaum/dd-trace-go.v1 . | wc -l)" -gt 0 ]; then
+            echo "Run 'goimports -w -local gopkg.in/knusbaum/dd-trace-go.v1 .' to format code."
+            ~/go/bin/goimports -d -local gopkg.in/knusbaum/dd-trace-go.v1 .
             exit 1
           fi
 
@@ -89,7 +89,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
         with:
-          repository: 'DataDog/dd-trace-go'
+          repository: 'knusbaum/dd-trace-go'
       - uses: actions/setup-go@v3
         with:
           go-version: ${{ matrix.go-version }}
@@ -130,7 +130,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
         with:
-          repository: 'DataDog/dd-trace-go'
+          repository: 'knusbaum/dd-trace-go'
       - uses: actions/setup-go@v3
         with:
           go-version: ${{ matrix.go-version }}
@@ -272,7 +272,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
         with:
-          repository: 'DataDog/dd-trace-go'
+          repository: 'knusbaum/dd-trace-go'
       - uses: actions/setup-go@v3
         with:
           go-version: ${{ matrix.go-version }}
